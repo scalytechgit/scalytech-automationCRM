@@ -3,17 +3,20 @@ import json
 import pandas as pd
 from datetime import datetime
 from config.settings import USE_GOOGLE_SHEETS, SHEET_NAME
-from config.settings import USE_GOOGLE_SHEETS, SHEET_NAME
 
 # =========================
 # GOOGLE SHEETS SETUP
 # =========================
 if USE_GOOGLE_SHEETS:
     import gspread
-    import streamlit as st
+    try:
+        import streamlit as st
+    except ImportError:
+        st = None  # fallback se rodar local sem Streamlit
+
     from google.oauth2.service_account import Credentials
 
-    scope = [
+    SCOPES = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
     ]
@@ -21,29 +24,44 @@ if USE_GOOGLE_SHEETS:
     def get_google_credentials():
         """
         Retorna credenciais do Google Sheets.
+        Prioridade:
         1️⃣ Streamlit Secrets (produção)
         2️⃣ Variável de ambiente GOOGLE_CREDENTIALS (.env local)
-        3️⃣ Arquivo JSON local (credenciais.json)
+        3️⃣ Arquivo JSON local (config/credenciais.json)
         """
-        # Tenta usar Streamlit secrets
-        try:
-            creds_dict = st.secrets["GOOGLE_CREDENTIALS"]
-            return Credentials.from_service_account_info(creds_dict, scopes=scope)
-        except Exception:
-            pass
+        # 1️⃣ Streamlit Secrets
+        if st:
+            try:
+                creds_dict = st.secrets.get("GOOGLE_CREDENTIALS")
+                if creds_dict:
+                    if isinstance(creds_dict, str):
+                        creds_dict = json.loads(creds_dict)
+                    return Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+            except Exception:
+                pass
 
-        # Tenta usar .env
-        credenciais_env = os.getenv("GOOGLE_CREDENTIALS")
-        if credenciais_env:
-            creds_dict = json.loads(credenciais_env)
-            return Credentials.from_service_account_info(creds_dict, scopes=scope)
+        # 2️⃣ Variável de ambiente
+        cred_env = os.getenv("GOOGLE_CREDENTIALS")
+        if cred_env:
+            try:
+                creds_dict = json.loads(cred_env)
+                return Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+            except json.JSONDecodeError:
+                raise ValueError("GOOGLE_CREDENTIALS está inválido (não é JSON).")
 
-        # Fallback para arquivo local
-        caminho = os.path.join(os.path.dirname(__file__), "..", "config", "credenciais.json")
-        return Credentials.from_service_account_file(caminho, scopes=scope)
+        # 3️⃣ Arquivo local
+        local_path = os.path.join(os.path.dirname(__file__), "..", "config", "credenciais.json")
+        if os.path.isfile(local_path):
+            return Credentials.from_service_account_file(local_path, scopes=SCOPES)
+
+        raise FileNotFoundError(
+            "Não foi possível encontrar credenciais do Google. "
+            "Use Streamlit secrets, variável de ambiente ou arquivo local config/credenciais.json."
+        )
 
     creds = get_google_credentials()
     client = gspread.authorize(creds)
+
 
 # =========================
 # CARREGAR LEADS
@@ -68,6 +86,7 @@ def carregar_leads():
         df = pd.read_excel("data/leads.xlsx")
         return df
 
+
 # =========================
 # ATUALIZAR STATUS
 # =========================
@@ -91,6 +110,7 @@ def atualizar_status(sheet_or_df, row, status):
         df.at[row, "ultimo_envio"] = data_atual
         df.to_excel("data/leads.xlsx", index=False)
 
+
 # =========================
 # ATUALIZAR LINHA (DINÂMICO)
 # =========================
@@ -98,6 +118,7 @@ def atualizar_linha(sheet, linha, dados):
     valores = ["" if pd.isna(v) else str(v) for v in dados.values()]
     ultima_coluna = chr(65 + len(valores) - 1)
     sheet.update(f"A{linha}:{ultima_coluna}{linha}", [valores])
+
 
 # =========================
 # REESCREVER PLANILHA COMPLETA
