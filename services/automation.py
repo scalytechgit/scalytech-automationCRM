@@ -1,26 +1,34 @@
+import os
+from datetime import datetime
+
+import pandas as pd
+from config.settings import DIAS_FOLLOWUP, USE_GOOGLE_SHEETS, SHEET_NAME
 from services.lead_service import carregar_leads, atualizar_status
 from services.email_service import enviar_email
 from services.whatsapp_service import enviar_whatsapp
-from config.settings import DIAS_FOLLOWUP, USE_GOOGLE_SHEETS
-
-from datetime import datetime
-from config.settings import USE_GOOGLE_SHEETS, SHEET_NAME
-import pandas as pd
-import os
-
 
 # =========================
 # TEMPLATE
 # =========================
 def carregar_template(nome_arquivo):
+    """
+    Carrega o template de email ou WhatsApp.
+    Caminho relativo à pasta templates.
+    """
     base_path = os.path.dirname(os.path.abspath(__file__))
     caminho = os.path.join(base_path, "..", "templates", nome_arquivo)
+
+    if not os.path.exists(caminho):
+        raise FileNotFoundError(f"Template não encontrado: {caminho}")
 
     with open(caminho, "r", encoding="utf-8") as f:
         return f.read()
 
 
 def processar_email(template, cliente, assunto_padrao):
+    """
+    Substitui placeholders e separa assunto/corpo do email.
+    """
     mensagem = template.replace("{cliente}", cliente)
 
     if "\n" in mensagem:
@@ -34,7 +42,7 @@ def processar_email(template, cliente, assunto_padrao):
 
 
 # =========================
-# PROCESSAMENTO
+# PROCESSAMENTO DE LEADS
 # =========================
 def processar_leads():
     data = carregar_leads()
@@ -52,7 +60,7 @@ def processar_leads():
         return
 
     for i, row in df.iterrows():
-        linha_sheet = i + 2
+        linha_sheet = i + 2  # Excel/Sheets começam na linha 2
 
         cliente = str(row.get("cliente", "")).strip()
         email = str(row.get("email", "")).strip()
@@ -65,7 +73,6 @@ def processar_leads():
         # =========================
         if not cliente or not email:
             continue
-
         if status == "respondido":
             continue
 
@@ -76,27 +83,16 @@ def processar_leads():
             try:
                 # EMAIL
                 template_email = carregar_template("email_1.txt")
-                assunto, corpo = processar_email(
-                    template_email,
-                    cliente,
-                    "Contato Scalytech"
-                )
-
+                assunto, corpo = processar_email(template_email, cliente, "Contato Scalytech")
                 enviar_email(email, assunto, corpo)
 
                 # WHATSAPP
                 if telefone:
                     template_wpp = carregar_template("whatsapp_1.txt")
                     mensagem_wpp = template_wpp.replace("{cliente}", cliente)
-
                     enviar_whatsapp(telefone, mensagem_wpp)
 
-                atualizar_status(
-                    sheet if USE_GOOGLE_SHEETS else df,
-                    linha_sheet,
-                    "enviado"
-                )
-
+                atualizar_status(sheet if USE_GOOGLE_SHEETS else df, linha_sheet, "enviado")
                 print(f"✅ Lead novo processado: {cliente}")
 
             except Exception as e:
@@ -105,49 +101,34 @@ def processar_leads():
         # =========================
         # FOLLOW-UP
         # =========================
-        elif (
-            status == "enviado"
-            and pd.notna(ultimo_envio)
-            and str(ultimo_envio).strip() != ""
-        ):
+        elif status == "enviado" and pd.notna(ultimo_envio) and str(ultimo_envio).strip() != "":
             try:
                 data_envio = pd.to_datetime(ultimo_envio)
                 dias = (datetime.now() - data_envio).days
-            except:
+            except Exception:
                 continue
 
             if dias >= DIAS_FOLLOWUP:
                 try:
                     # EMAIL
                     template_email = carregar_template("email_followup.txt")
-                    assunto, corpo = processar_email(
-                        template_email,
-                        cliente,
-                        "Follow-up Scalytech"
-                    )
-
+                    assunto, corpo = processar_email(template_email, cliente, "Follow-up Scalytech")
                     enviar_email(email, assunto, corpo)
 
                     # WHATSAPP
                     if telefone:
                         template_wpp = carregar_template("whatsapp_followup.txt")
                         mensagem_wpp = template_wpp.replace("{cliente}", cliente)
-
                         enviar_whatsapp(telefone, mensagem_wpp)
 
-                    atualizar_status(
-                        sheet if USE_GOOGLE_SHEETS else df,
-                        linha_sheet,
-                        "followup"
-                    )
-
+                    atualizar_status(sheet if USE_GOOGLE_SHEETS else df, linha_sheet, "followup")
                     print(f"🔁 Follow-up enviado: {cliente}")
 
                 except Exception as e:
                     print(f"❌ Erro no follow-up para {cliente}: {e}")
 
         # =========================
-        # IGNORA
+        # IGNORA FOLLOWUP
         # =========================
         elif status == "followup":
             continue

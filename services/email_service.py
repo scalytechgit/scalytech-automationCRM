@@ -2,10 +2,12 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from config.settings import EMAIL, SENHA, SMTP_SERVER, SMTP_PORT
-from config.settings import USE_GOOGLE_SHEETS, SHEET_NAME
-
 
 def enviar_email(destinatario, assunto, mensagem):
+    """
+    Envia um email em texto + HTML.
+    Funciona local ou no Streamlit Cloud.
+    """
     try:
         # =========================
         # MONTAR EMAIL (HTML + TEXTO)
@@ -38,7 +40,7 @@ def enviar_email(destinatario, assunto, mensagem):
         # =========================
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
             server.starttls()
-            server.login(EMAIL, SENHA)
+            server.login(EMAIL, SENHA)  # usa secrets/.env
             server.send_message(msg)
 
         print(f"✅ Email enviado para {destinatario}")
