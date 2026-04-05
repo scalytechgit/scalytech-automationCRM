@@ -9,27 +9,25 @@ def enviar_email(destinatario: str, assunto: str, mensagem: str):
     Envia um email em texto + HTML.
     Funciona local ou no Streamlit Cloud.
     """
+
     if not destinatario:
         print("⚠️ Destinatário vazio. Email não enviado.")
         return
 
     if not EMAIL or not SENHA:
-        print("⚠️ Credenciais de email não configuradas. Verifique settings.py ou variáveis de ambiente.")
+        print("⚠️ Credenciais de email não configuradas. Use st.secrets ou .env")
         return
 
     try:
-        # =========================
-        # MONTAR EMAIL (HTML + TEXTO)
-        # =========================
+        # Monta a mensagem
         msg = MIMEMultipart()
         msg["Subject"] = assunto
         msg["From"] = EMAIL
         msg["To"] = destinatario
 
-        # versão texto
+        # Texto plano
         texto = MIMEText(mensagem, "plain")
-
-        # versão HTML (melhor aparência)
+        # HTML
         html = MIMEText(f"""
         <html>
             <body>
@@ -44,18 +42,18 @@ def enviar_email(destinatario: str, assunto: str, mensagem: str):
         msg.attach(texto)
         msg.attach(html)
 
-        # =========================
-        # ENVIO
-        # =========================
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10) as server:
+        # Envio
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.ehlo()
             server.starttls()
+            server.ehlo()
             server.login(EMAIL, SENHA)
             server.send_message(msg)
 
         print(f"✅ Email enviado para {destinatario}")
 
     except smtplib.SMTPAuthenticationError:
-        print("❌ Erro de autenticação. Verifique EMAIL e SENHA.")
+        print("❌ Erro de autenticação. Verifique EMAIL e SENHA ou use senha de app do Gmail.")
     except smtplib.SMTPConnectError:
         print("❌ Não foi possível conectar ao servidor SMTP.")
     except Exception as e:

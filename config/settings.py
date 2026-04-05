@@ -1,35 +1,74 @@
-# config/settings.py
 import os
 import json
 
 # =========================
-# CONFIGURAÇÕES BÁSICAS
+# STREAMLIT SECRETS DETECTION
 # =========================
-EMAIL = os.getenv("EMAIL", "seuemail@exemplo.com")
-SENHA = os.getenv("SENHA", "senha_do_email")
+try:
+    import streamlit as st
+    USE_SECRETS = True
+except ImportError:
+    USE_SECRETS = False
+
+# =========================
+# GET CONFIG
+# =========================
+def get_config(key, default=None):
+    """
+    Pega valor do Streamlit secrets (deploy) ou variável de ambiente local.
+    """
+    if USE_SECRETS:
+        value = st.secrets.get(key)
+        if value is not None:
+            return value
+    return os.getenv(key, default)
+
+# =========================
+# CONFIGURAÇÕES PRINCIPAIS
+# =========================
+EMAIL = get_config("EMAIL")
+SENHA = get_config("SENHA")
 
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
-INSTANCE_ID = os.getenv("INSTANCE_ID", "")
-TOKEN = os.getenv("TOKEN", "")
+INSTANCE_ID = get_config("INSTANCE_ID")
+TOKEN = get_config("TOKEN")
 
+# Dias de follow-up
 try:
-    DIAS_FOLLOWUP = int(os.getenv("DIAS_FOLLOWUP", 2))
+    DIAS_FOLLOWUP = int(get_config("DIAS_FOLLOWUP", 2))
 except ValueError:
     DIAS_FOLLOWUP = 2
 
-# =========================
-# GOOGLE SHEETS
-# =========================
-USE_GOOGLE_SHEETS = str(os.getenv("USE_GOOGLE_SHEETS", "True")).strip().lower() in ["true", "1", "yes"]
-SHEET_NAME = os.getenv("SHEET_NAME", "Leads Scalytech")
+# Converte string para bool
+def str_to_bool(s):
+    return str(s).lower() in ["true", "1", "yes"]
 
-# Caminho para credenciais JSON local (não usa Streamlit Secrets)
-GOOGLE_CRED_PATH = os.getenv("GOOGLE_CRED_PATH", "config/credenciais.json")
+USE_GOOGLE_SHEETS = str_to_bool(get_config("USE_GOOGLE_SHEETS", "true"))
+SHEET_NAME = get_config("SHEET_NAME", "Leads Scalytech")
 
 # =========================
-# DEBUG / aviso
+# GOOGLE CREDENTIALS
 # =========================
-if USE_GOOGLE_SHEETS and not os.path.exists(GOOGLE_CRED_PATH):
-    print(f"⚠️ Arquivo de credenciais Google não encontrado em {GOOGLE_CRED_PATH}. Google Sheets não disponível.")
+def get_google_creds():
+    """
+    Retorna credenciais do Google como dicionário.
+    Usa st.secrets no Cloud ou lê localmente config/credentials.json
+    """
+    if not USE_GOOGLE_SHEETS:
+        return None
+
+    if USE_SECRETS:
+        creds_str = st.secrets.get("GOOGLE_CREDENTIALS")
+        if creds_str:
+            return json.loads(creds_str)
+        else:
+            raise RuntimeError("❌ GOOGLE_CREDENTIALS não encontrado no secrets.toml")
+    else:
+        cred_path = "config/credentials.json"
+        if os.path.exists(cred_path):
+            with open(cred_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        else:
+            raise FileNotFoundError(f"❌ Arquivo {cred_path} não encontrado")

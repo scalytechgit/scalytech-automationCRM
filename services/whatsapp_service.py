@@ -23,11 +23,13 @@ def enviar_whatsapp(numero: str, mensagem: str):
     }
 
     try:
-        response = requests.post(url, data=payload, timeout=10)
-        if response.status_code == 200:
-            print(f"✅ WhatsApp enviado para {numero}")
-        else:
-            print(f"❌ Erro WhatsApp ({response.status_code}): {response.text}")
+        response = requests.post(url, json=payload, timeout=10)
+        response.raise_for_status()  # Lança exceção se status != 2xx
+
+        print(f"✅ WhatsApp enviado para {numero}")
+
+    except requests.HTTPError:
+        print(f"❌ Erro HTTP ao enviar WhatsApp ({response.status_code}): {response.text}")
     except requests.Timeout:
         print(f"❌ Timeout ao enviar WhatsApp para {numero}")
     except requests.ConnectionError:

@@ -1,92 +1,73 @@
 # services/lead_service.py
 import pandas as pd
 from datetime import datetime
-from config.settings import USE_GOOGLE_SHEETS, SHEET_NAME, GOOGLE_CRED_PATH
-
-client = None  # inicializa client
+from config.settings import SHEET_NAME, get_google_creds
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
 # =========================
 # GOOGLE SHEETS SETUP
 # =========================
-if USE_GOOGLE_SHEETS:
-    try:
-        import gspread
-    except ImportError:
-        raise RuntimeError("gspread não instalado. Rode: pip install gspread")
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive"
+]
 
-    from oauth2client.service_account import ServiceAccountCredentials
+creds_dict = get_google_creds()
+if not creds_dict:
+    raise RuntimeError("❌ Credenciais do Google não encontradas. Configure st.secrets['GOOGLE_CREDENTIALS'].")
 
-    SCOPES = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ]
-
-    # Inicializa client usando o arquivo credenciais.json
-    try:
-        creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_CRED_PATH, SCOPES)
-        client = gspread.authorize(creds)
-    except Exception as e:
-        client = None
-        print(f"⚠️ Erro ao autenticar Google Sheets: {e}")
-        print("Google Sheets não disponível.")
-
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+client = gspread.authorize(creds)
 
 # =========================
 # CARREGAR LEADS
 # =========================
 def carregar_leads():
-    if USE_GOOGLE_SHEETS and client:
-        sheet = client.open(SHEET_NAME).sheet1
-        dados = sheet.get_all_values()
+    sheet = client.open(SHEET_NAME).sheet1
+    dados = sheet.get_all_values()
 
-        # Cabeçalho padrão se planilha vazia
-        if not dados:
-            colunas = ["cliente","nicho","email","instagram","site","telefone","status","ultimo_envio"]
-            return pd.DataFrame(columns=colunas), sheet
+    if not dados:
+        return pd.DataFrame(), sheet
 
-        # remove linhas vazias
-        dados = [row for row in dados if any(cell.strip() for cell in row)]
-        colunas = dados[0]
-        linhas = dados[1:]
-        df = pd.DataFrame(linhas, columns=colunas)
-        return df, sheet
-    else:
-        raise RuntimeError("Google Sheets não disponível. Verifique credenciais ou arquivo config/credenciais.json.")
+    # remove linhas completamente vazias
+    dados = [row for row in dados if any(cell.strip() for cell in row)]
+    colunas = dados[0]
+    linhas = dados[1:]
 
+    df = pd.DataFrame(linhas, columns=colunas)
+    return df, sheet
 
 # =========================
 # ATUALIZAR STATUS
 # =========================
 def atualizar_status(sheet, row, status):
     data_atual = datetime.now().strftime("%Y-%m-%d")
-    if USE_GOOGLE_SHEETS and client:
-        headers = sheet.row_values(1)
+    headers = sheet.row_values(1)
+
+    try:
         col_status = headers.index("status") + 1
         col_data = headers.index("ultimo_envio") + 1
-        sheet.update_cell(row, col_status, status)
-        sheet.update_cell(row, col_data, data_atual)
+    except ValueError:
+        raise RuntimeError("❌ Colunas 'status' ou 'ultimo_envio' não encontradas no Google Sheets")
 
+    sheet.update_cell(row, col_status, status)
+    sheet.update_cell(row, col_data, data_atual)
 
 # =========================
-# ATUALIZAR LINHA DINÂMICA
+# ATUALIZAR LINHA (DINÂMICO)
 # =========================
 def atualizar_linha(sheet, linha, dados):
-    if USE_GOOGLE_SHEETS and client:
-        valores = ["" if pd.isna(v) else str(v) for v in dados.values()]
-        # Atualiza da coluna A até a última coluna necessária
-        ultima_coluna = chr(64 + len(valores))  # 65 = A
-        sheet.update(f"A{linha}:{ultima_coluna}{linha}", [valores])
-
+    valores = ["" if pd.isna(v) else str(v) for v in dados.values()]
+    ultima_coluna = chr(65 + len(valores) - 1)
+    sheet.update(f"A{linha}:{ultima_coluna}{linha}", [valores])
 
 # =========================
-# SALVAR PLANILHA COMPLETA
+# REESCREVER PLANILHA COMPLETA
 # =========================
 def salvar_tudo(sheet, df):
-    if USE_GOOGLE_SHEETS and client:
-        df = df.fillna("").astype(str)
-        sheet.clear()
-        # Escreve cabeçalho
-        sheet.append_row(df.columns.tolist())
-        # Escreve cada linha
-        for _, row in df.iterrows():
-            sheet.append_row(row.tolist())
+    df = df.fillna("").astype(str)
+    sheet.clear()
+    sheet.append_row(df.columns.tolist())
+    for _, row in df.iterrows():
+        sheet.append_row(row.tolist())

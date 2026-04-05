@@ -1,15 +1,11 @@
-# app.py
-import os
-import tempfile
-import pandas as pd
-import plotly.express as px
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
-
+import tempfile
 import streamlit as st
+import pandas as pd
+import plotly.express as px
 from services.automation import processar_leads
-from services.lead_service import carregar_leads, salvar_tudo
-from config.settings import USE_GOOGLE_SHEETS
+from services.lead_service import carregar_leads
 
 # =========================
 # CONFIG
@@ -26,44 +22,71 @@ if "msg" not in st.session_state:
 # HEADER
 # =========================
 col1, col2 = st.columns([1, 6])
+
 with col1:
     st.image("assets/logo.png", width=180)
+
 with col2:
     st.markdown("<h1>Scalytech CRM</h1>", unsafe_allow_html=True)
     st.markdown("<p style='color:gray;'>Sistema de automação e gestão de leads</p>", unsafe_allow_html=True)
+
 st.divider()
 
 # =========================
 # LOAD DATA
 # =========================
 def load_data():
-    try:
-        df, sheet = carregar_leads()
-    except Exception:
-        df = pd.DataFrame(columns=["cliente","nicho","email","instagram","site","telefone","status","ultimo_envio"])
-        sheet = None
+    data = carregar_leads()
 
-    for col in ["cliente","nicho","email","instagram","site","telefone","status","ultimo_envio"]:
+    if isinstance(data, tuple):
+        df, sheet = data
+        is_google = True
+    else:
+        df = data
+        sheet = None
+        is_google = False
+
+    df = pd.DataFrame(df).copy()
+
+    colunas = [
+        "cliente",
+        "nicho",
+        "email",
+        "instagram",
+        "site",
+        "telefone",
+        "status",
+        "ultimo_envio"
+    ]
+
+    for col in colunas:
         if col not in df.columns:
             df[col] = ""
 
-    df = df[["cliente","nicho","email","instagram","site","telefone","status","ultimo_envio"]]
+    df = df[colunas]
+
     df["status"] = df["status"].replace("", "novo")
+
     validos = ["novo", "enviado", "followup", "respondido"]
     df["status"] = df["status"].apply(lambda x: x if x in validos else "novo")
-    df["ultimo_envio"] = df["ultimo_envio"].astype(str)
-    return df, sheet
 
-df, sheet = load_data()
+    df["ultimo_envio"] = df["ultimo_envio"].astype(str)
+
+    return df, sheet, is_google
+
+
+df, sheet, is_google = load_data()
 
 # =========================
 # MÉTRICAS
 # =========================
 c1, c2, c3, c4 = st.columns(4)
+
 c1.metric("Total", len(df))
 c2.metric("Novos", len(df[df["status"] == "novo"]))
 c3.metric("Enviados", len(df[df["status"] == "enviado"]))
 c4.metric("Respondidos", len(df[df["status"] == "respondido"]))
+
 st.divider()
 
 # =========================
@@ -80,6 +103,7 @@ with g1:
 
 with g2:
     df_envio = df[df["ultimo_envio"] != ""].copy()
+
     if not df_envio.empty:
         df_envio["data"] = pd.to_datetime(df_envio["ultimo_envio"], errors="coerce").dt.date
         envios = df_envio.groupby("data").size().reset_index(name="envios")
@@ -91,9 +115,10 @@ with g2:
 st.divider()
 
 # =========================
-# TABELA EDITÁVEL
+# TABELA
 # =========================
 st.subheader("📋 Gerenciar Leads")
+
 df_editado = st.data_editor(
     df,
     use_container_width=True,
@@ -102,7 +127,8 @@ df_editado = st.data_editor(
     key="editor",
     column_config={
         "status": st.column_config.SelectboxColumn(
-            "Status", options=["novo", "enviado", "followup", "respondido"]
+            "Status",
+            options=["novo", "enviado", "followup", "respondido"]
         )
     }
 )
@@ -112,65 +138,67 @@ df_editado = st.data_editor(
 # =========================
 b1, b2, b3 = st.columns(3)
 
-with b1:  # SALVAR
+# SALVAR
+with b1:
     if st.button("💾 Salvar"):
         df_novo = df_editado.fillna("").astype(str)
-        try:
-            if USE_GOOGLE_SHEETS and sheet:
-                sheet.clear()
-                sheet.append_row(df_novo.columns.tolist())
-                for _, row in df_novo.iterrows():
-                    sheet.append_row(row.tolist())
-            else:
-                salvar_tudo(None, df_novo)  # salva localmente
-            st.session_state.msg = "✅ Alterações salvas com sucesso!"
-            st.rerun()
-        except Exception as e:
-            st.error(f"❌ Erro ao salvar: {e}")
 
-with b2:  # AUTOMAÇÃO
-    if st.button("🚀 Rodar automação"):
-        try:
-            processar_leads()
-        except Exception as e:
-            st.error(f"❌ Erro na automação: {e}")
+        if is_google:
+            sheet.clear()
+            sheet.append_row(df_novo.columns.tolist())
+
+            for _, row in df_novo.iterrows():
+                sheet.append_row(row.tolist())
         else:
-            st.session_state.msg = "🤖 Automação executada com sucesso!"
-            st.rerun()
+            df_novo.to_excel("data/leads.xlsx", index=False)
 
-# =========================
+        st.session_state.msg = "✅ Alterações salvas com sucesso!"
+        st.rerun()
+
+# AUTOMAÇÃO
+with b2:
+    if st.button("🚀 Rodar automação"):
+        processar_leads()
+
+        st.session_state.msg = "🤖 Automação executada com sucesso!"
+        st.rerun()
+
 # PDF
-# =========================
 def gerar_pdf(df):
-    with tempfile.TemporaryDirectory() as tmp:
-        path = os.path.join(tmp, "leads.pdf")
-        doc = SimpleDocTemplate(path)
-        styles = getSampleStyleSheet()
-        elements = [Paragraph("Relatório de Leads", styles["Title"]), Spacer(1, 10)]
-        for _, row in df.iterrows():
-            texto = f"""
-            Cliente: {row.get('cliente','')}<br/>
-            Nicho: {row.get('nicho','')}<br/>
-            Email: {row.get('email','')}<br/>
-            Instagram: {row.get('instagram','')}<br/>
-            Site: {row.get('site','')}<br/>
-            Telefone: {row.get('telefone','')}<br/>
-            Status: {row.get('status','')}<br/>
-            Último envio: {row.get('ultimo_envio','')}<br/>
-            """
-            elements.append(Paragraph(texto, styles["Normal"]))
-            elements.append(Spacer(1, 10))
-        doc.build(elements)
-        return path
+    path = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf").name
+    doc = SimpleDocTemplate(path)
+    styles = getSampleStyleSheet()
+
+    elements = []
+    elements.append(Paragraph("Relatório de Leads", styles["Title"]))
+    elements.append(Spacer(1, 10))
+
+    for _, row in df.iterrows():
+        texto = f"""
+        Cliente: {row.get('cliente','')}<br/>
+        Nicho: {row.get('nicho','')}<br/>
+        Email: {row.get('email','')}<br/>
+        Instagram: {row.get('instagram','')}<br/>
+        Site: {row.get('site','')}<br/>
+        Telefone: {row.get('telefone','')}<br/>
+        Status: {row.get('status','')}<br/>
+        Último envio: {row.get('ultimo_envio','')}<br/>
+        """
+        elements.append(Paragraph(texto, styles["Normal"]))
+        elements.append(Spacer(1, 10))
+
+    doc.build(elements)
+    return path
 
 with b3:
     if st.button("📄 Exportar PDF"):
         pdf = gerar_pdf(df_editado)
+
         with open(pdf, "rb") as f:
             st.download_button("📥 Baixar", f, file_name="leads.pdf")
 
 # =========================
-# MENSAGEM
+# 🔥 MENSAGEM NO LUGAR CERTO (EMBAIXO DA TABELA)
 # =========================
 if st.session_state.msg:
     st.success(st.session_state.msg)
@@ -181,12 +209,13 @@ st.divider()
 # =========================
 # FILTRO
 # =========================
-status = st.selectbox("Filtrar", ["Todos", "novo", "enviado", "followup", "respondido"])
-df_filtro = df.copy()
-if status != "Todos":
-    df_filtro = df_filtro[df_filtro["status"] == status]
+status = st.selectbox(
+    "Filtrar",
+    ["Todos", "novo", "enviado", "followup", "respondido"]
+)
 
-st.dataframe(df_filtro, use_container_width=True)
+if status != "Todos":
+    st.dataframe(df[df["status"] == status], use_container_width=True)
 
 st.markdown("---")
 st.caption("Scalytech © Sistema de automação comercial")
