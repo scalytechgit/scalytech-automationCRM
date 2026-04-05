@@ -1,3 +1,4 @@
+# app.py
 import os
 import tempfile
 import pandas as pd
@@ -7,8 +8,8 @@ from reportlab.lib.styles import getSampleStyleSheet
 
 import streamlit as st
 from services.automation import processar_leads
-from services.lead_service import carregar_leads
-from config.settings import USE_GOOGLE_SHEETS, SHEET_NAME
+from services.lead_service import carregar_leads, salvar_tudo
+from config.settings import USE_GOOGLE_SHEETS
 
 # =========================
 # CONFIG
@@ -36,28 +37,24 @@ st.divider()
 # LOAD DATA
 # =========================
 def load_data():
-    data = carregar_leads()
-    if isinstance(data, tuple):
-        df, sheet = data
-        is_google = True
-    else:
-        df = data
+    try:
+        df, sheet = carregar_leads()
+    except Exception:
+        df = pd.DataFrame(columns=["cliente","nicho","email","instagram","site","telefone","status","ultimo_envio"])
         sheet = None
-        is_google = False
 
-    df = pd.DataFrame(df).copy()
-    colunas = ["cliente","nicho","email","instagram","site","telefone","status","ultimo_envio"]
-    for col in colunas:
+    for col in ["cliente","nicho","email","instagram","site","telefone","status","ultimo_envio"]:
         if col not in df.columns:
             df[col] = ""
-    df = df[colunas]
+
+    df = df[["cliente","nicho","email","instagram","site","telefone","status","ultimo_envio"]]
     df["status"] = df["status"].replace("", "novo")
     validos = ["novo", "enviado", "followup", "respondido"]
     df["status"] = df["status"].apply(lambda x: x if x in validos else "novo")
     df["ultimo_envio"] = df["ultimo_envio"].astype(str)
-    return df, sheet, is_google
+    return df, sheet
 
-df, sheet, is_google = load_data()
+df, sheet = load_data()
 
 # =========================
 # MÉTRICAS
@@ -119,14 +116,13 @@ with b1:  # SALVAR
     if st.button("💾 Salvar"):
         df_novo = df_editado.fillna("").astype(str)
         try:
-            if is_google and sheet:
+            if USE_GOOGLE_SHEETS and sheet:
                 sheet.clear()
                 sheet.append_row(df_novo.columns.tolist())
                 for _, row in df_novo.iterrows():
                     sheet.append_row(row.tolist())
             else:
-                os.makedirs("data", exist_ok=True)
-                df_novo.to_excel("data/leads.xlsx", index=False)
+                salvar_tudo(None, df_novo)  # salva localmente
             st.session_state.msg = "✅ Alterações salvas com sucesso!"
             st.rerun()
         except Exception as e:

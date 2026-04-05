@@ -1,13 +1,22 @@
+# services/email_service.py
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from config.settings import EMAIL, SENHA, SMTP_SERVER, SMTP_PORT
 
-def enviar_email(destinatario, assunto, mensagem):
+def enviar_email(destinatario: str, assunto: str, mensagem: str):
     """
     Envia um email em texto + HTML.
     Funciona local ou no Streamlit Cloud.
     """
+    if not destinatario:
+        print("⚠️ Destinatário vazio. Email não enviado.")
+        return
+
+    if not EMAIL or not SENHA:
+        print("⚠️ Credenciais de email não configuradas. Verifique settings.py ou variáveis de ambiente.")
+        return
+
     try:
         # =========================
         # MONTAR EMAIL (HTML + TEXTO)
@@ -38,12 +47,16 @@ def enviar_email(destinatario, assunto, mensagem):
         # =========================
         # ENVIO
         # =========================
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10) as server:
             server.starttls()
-            server.login(EMAIL, SENHA)  # usa secrets/.env
+            server.login(EMAIL, SENHA)
             server.send_message(msg)
 
         print(f"✅ Email enviado para {destinatario}")
 
+    except smtplib.SMTPAuthenticationError:
+        print("❌ Erro de autenticação. Verifique EMAIL e SENHA.")
+    except smtplib.SMTPConnectError:
+        print("❌ Não foi possível conectar ao servidor SMTP.")
     except Exception as e:
         print(f"❌ Erro ao enviar email para {destinatario}: {e}")

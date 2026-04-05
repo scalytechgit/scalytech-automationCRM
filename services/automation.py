@@ -1,16 +1,16 @@
+# services/automation.py
 import os
 from datetime import datetime
-
 import pandas as pd
 from config.settings import DIAS_FOLLOWUP, USE_GOOGLE_SHEETS, SHEET_NAME
-from services.lead_service import carregar_leads, atualizar_status
+from services.lead_service import carregar_leads, atualizar_status, salvar_tudo
 from services.email_service import enviar_email
 from services.whatsapp_service import enviar_whatsapp
 
 # =========================
 # TEMPLATE
 # =========================
-def carregar_template(nome_arquivo):
+def carregar_template(nome_arquivo: str) -> str:
     """
     Carrega o template de email ou WhatsApp.
     Caminho relativo à pasta templates.
@@ -25,7 +25,7 @@ def carregar_template(nome_arquivo):
         return f.read()
 
 
-def processar_email(template, cliente, assunto_padrao):
+def processar_email(template: str, cliente: str, assunto_padrao: str):
     """
     Substitui placeholders e separa assunto/corpo do email.
     """
@@ -45,15 +45,16 @@ def processar_email(template, cliente, assunto_padrao):
 # PROCESSAMENTO DE LEADS
 # =========================
 def processar_leads():
-    data = carregar_leads()
-
-    if isinstance(data, tuple):
-        df, sheet = data
-    else:
-        df = data
-        sheet = None
-
-    df = pd.DataFrame(df)
+    """
+    Processa todos os leads:
+    - Envia email/WhatsApp para novos leads
+    - Envia follow-up conforme DIAS_FOLLOWUP
+    """
+    try:
+        df, sheet = carregar_leads()
+    except Exception as e:
+        print(f"❌ Erro ao carregar leads: {e}")
+        return
 
     if df.empty:
         print("⚠️ Nenhum lead encontrado")
@@ -128,7 +129,16 @@ def processar_leads():
                     print(f"❌ Erro no follow-up para {cliente}: {e}")
 
         # =========================
-        # IGNORA FOLLOWUP
+        # LEADS FOLLOWUP JÁ PROCESSADOS
         # =========================
         elif status == "followup":
             continue
+
+    # =========================
+    # SALVA LOCAL SE NÃO USA GOOGLE SHEETS
+    # =========================
+    if not USE_GOOGLE_SHEETS:
+        caminho_csv = os.path.join(os.path.dirname(__file__), "..", "data", "leads_atualizado.csv")
+        os.makedirs(os.path.dirname(caminho_csv), exist_ok=True)
+        df.to_csv(caminho_csv, index=False)
+        print(f"💾 Leads salvos localmente: {caminho_csv}")
