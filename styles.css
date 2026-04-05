@@ -1,0 +1,27 @@
+/* Fundo geral */
+body {
+    background-color: #0f172a;
+    color: #e2e8f0;
+}
+
+/* Títulos */
+h1, h2, h3 {
+    color: #22c55e;
+}
+
+/* Botões */
+.stButton > button {
+    background-color: #2563eb;
+    color: white;
+    border-radius: 8px;
+    height: 45px;
+    font-weight: bold;
+}
+
+/* Cards */
+.metric-card {
+    background-color: #1e293b;
+    padding: 20px;
+    border-radius: 12px;
+    text-align: center;
+}
