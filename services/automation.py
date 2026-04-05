@@ -4,6 +4,7 @@ from services.whatsapp_service import enviar_whatsapp
 from config.settings import DIAS_FOLLOWUP, USE_GOOGLE_SHEETS
 
 from datetime import datetime
+from config.settings import USE_GOOGLE_SHEETS, SHEET_NAME
 import pandas as pd
 import os
 

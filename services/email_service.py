@@ -2,6 +2,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from config.settings import EMAIL, SENHA, SMTP_SERVER, SMTP_PORT
+from config.settings import USE_GOOGLE_SHEETS, SHEET_NAME
 
 
 def enviar_email(destinatario, assunto, mensagem):

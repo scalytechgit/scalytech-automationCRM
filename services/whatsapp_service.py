@@ -1,5 +1,6 @@
 import requests
 from config.settings import INSTANCE_ID, TOKEN
+from config.settings import USE_GOOGLE_SHEETS, SHEET_NAME
 
 def enviar_whatsapp(numero, mensagem):
     url = f"https://api.ultramsg.com/{INSTANCE_ID}/messages/chat"
