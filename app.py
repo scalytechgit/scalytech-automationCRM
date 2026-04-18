@@ -28,12 +28,12 @@ with col1:
 
 with col2:
     st.markdown("<h1>Scalytech CRM</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='color:gray;'>Sistema de automação e gestão de leads</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:gray;'>Sistema de automação e gestão de leads da Scalytech</p>", unsafe_allow_html=True)
 
 st.divider()
 
 # =========================
-# LOAD DATA
+# LOAD DATA (AJUSTADO 🔥)
 # =========================
 def load_data():
     data = carregar_leads()
@@ -48,23 +48,21 @@ def load_data():
 
     df = pd.DataFrame(df).copy()
 
-    colunas = [
+    # 🔥 Apenas colunas obrigatórias
+    colunas_obrigatorias = [
         "cliente",
-        "nicho",
         "email",
-        "instagram",
-        "site",
         "telefone",
         "status",
         "ultimo_envio"
     ]
 
-    for col in colunas:
+    # garante que existam
+    for col in colunas_obrigatorias:
         if col not in df.columns:
             df[col] = ""
 
-    df = df[colunas]
-
+    # status padrão
     df["status"] = df["status"].replace("", "novo")
 
     validos = ["novo", "enviado", "followup", "respondido"]
@@ -198,7 +196,7 @@ with b3:
             st.download_button("📥 Baixar", f, file_name="leads.pdf")
 
 # =========================
-# 🔥 MENSAGEM NO LUGAR CERTO (EMBAIXO DA TABELA)
+# MENSAGEM
 # =========================
 if st.session_state.msg:
     st.success(st.session_state.msg)

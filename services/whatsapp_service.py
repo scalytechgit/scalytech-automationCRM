@@ -1,38 +1,52 @@
-# services/whatsapp_service.py
 import requests
-from config.settings import INSTANCE_ID, TOKEN
+from config.settings import get_config
 
-def enviar_whatsapp(numero: str, mensagem: str):
+ACCESS_TOKEN = get_config("WHATSAPP_TOKEN")
+PHONE_NUMBER_ID = get_config("PHONE_NUMBER_ID")
+
+BASE_URL = "https://graph.facebook.com/v19.0"
+
+
+def enviar_template(numero: str, template: str, parametros=None):
     """
-    Envia mensagem via WhatsApp usando API UltraMsg.
-    Funciona local ou no Streamlit Cloud.
+    Envia template aprovado pela Meta
     """
-    if not INSTANCE_ID or not TOKEN:
-        print("⚠️ WhatsApp não enviado: INSTANCE_ID ou TOKEN não configurados.")
+    if not ACCESS_TOKEN or not PHONE_NUMBER_ID:
+        print("⚠️ Credenciais do WhatsApp não configuradas.")
         return
 
-    if not numero or not mensagem:
-        print("⚠️ Número ou mensagem vazios. WhatsApp não enviado.")
-        return
+    url = f"{BASE_URL}/{PHONE_NUMBER_ID}/messages"
 
-    url = f"https://api.ultramsg.com/{INSTANCE_ID}/messages/chat"
     payload = {
-        "token": TOKEN,
+        "messaging_product": "whatsapp",
         "to": numero,
-        "body": mensagem
+        "type": "template",
+        "template": {
+            "name": template,
+            "language": {"code": "pt_BR"}
+        }
+    }
+
+    # Caso tenha variáveis no template
+    if parametros:
+        payload["template"]["components"] = [
+            {
+                "type": "body",
+                "parameters": [
+                    {"type": "text", "text": p} for p in parametros
+                ]
+            }
+        ]
+
+    headers = {
+        "Authorization": f"Bearer {ACCESS_TOKEN}",
+        "Content-Type": "application/json"
     }
 
     try:
-        response = requests.post(url, json=payload, timeout=10)
-        response.raise_for_status()  # Lança exceção se status != 2xx
+        response = requests.post(url, headers=headers, json=payload, timeout=10)
+        response.raise_for_status()
+        print(f"✅ Template enviado para {numero}")
 
-        print(f"✅ WhatsApp enviado para {numero}")
-
-    except requests.HTTPError:
-        print(f"❌ Erro HTTP ao enviar WhatsApp ({response.status_code}): {response.text}")
-    except requests.Timeout:
-        print(f"❌ Timeout ao enviar WhatsApp para {numero}")
-    except requests.ConnectionError:
-        print(f"❌ Erro de conexão ao enviar WhatsApp para {numero}")
     except Exception as e:
-        print(f"❌ Erro geral ao enviar WhatsApp para {numero}: {e}")
+        print(f"❌ Erro ao enviar template: {e}")

@@ -1,10 +1,11 @@
 from services.lead_service import carregar_leads, atualizar_status
 from services.email_service import enviar_email
-from services.whatsapp_service import enviar_whatsapp
+from services.whatsapp_service import enviar_template
 from config.settings import DIAS_FOLLOWUP, USE_GOOGLE_SHEETS
 from datetime import datetime
 import pandas as pd
 import os
+
 
 # =========================
 # CARREGAR TEMPLATE
@@ -54,9 +55,11 @@ def processar_leads():
         # =========================
         if status == "novo":
             try:
+                # EMAIL
                 template_email = carregar_template("templates/email_1.txt")
                 if not template_email:
                     continue
+
                 mensagem_email = template_email.replace("{cliente}", cliente)
 
                 if "\n" in mensagem_email:
@@ -68,13 +71,21 @@ def processar_leads():
 
                 enviar_email(email, assunto, corpo)
 
+                # WHATSAPP (TEMPLATE OFICIAL)
                 if telefone:
-                    template_wpp = carregar_template("templates/whatsapp_1.txt")
-                    if template_wpp:
-                        mensagem_wpp = template_wpp.replace("{cliente}", cliente)
-                        enviar_whatsapp(telefone, mensagem_wpp)
+                    print(f"📤 Enviando template inicial para {cliente} ({telefone})")
 
-                atualizar_status(sheet if USE_GOOGLE_SHEETS else df, linha_sheet, "enviado")
+                    enviar_template(
+                        telefone,
+                        "primeiro_contato",
+                        [cliente]
+                    )
+
+                atualizar_status(
+                    sheet if USE_GOOGLE_SHEETS else df,
+                    linha_sheet,
+                    "enviado"
+                )
 
             except Exception as e:
                 print(f"❌ Erro ao enviar para {cliente}: {e}")
@@ -87,15 +98,19 @@ def processar_leads():
                 data_envio = pd.to_datetime(ultimo_envio, errors="coerce")
                 if pd.isna(data_envio):
                     continue
+
                 dias = (datetime.now() - data_envio).days
+
             except Exception:
                 continue
 
             if dias >= DIAS_FOLLOWUP:
                 try:
+                    # EMAIL FOLLOW-UP
                     template_email = carregar_template("templates/email_followup.txt")
                     if not template_email:
                         continue
+
                     mensagem_email = template_email.replace("{cliente}", cliente)
 
                     if "\n" in mensagem_email:
@@ -107,13 +122,21 @@ def processar_leads():
 
                     enviar_email(email, assunto, corpo)
 
+                    # WHATSAPP FOLLOW-UP (TEMPLATE)
                     if telefone:
-                        template_wpp = carregar_template("templates/whatsapp_followup.txt")
-                        if template_wpp:
-                            mensagem_wpp = template_wpp.replace("{cliente}", cliente)
-                            enviar_whatsapp(telefone, mensagem_wpp)
+                        print(f"📤 Enviando follow-up para {cliente} ({telefone})")
 
-                    atualizar_status(sheet if USE_GOOGLE_SHEETS else df, linha_sheet, "followup")
+                        enviar_template(
+                            telefone,
+                            "followup",
+                            [cliente]
+                        )
+
+                    atualizar_status(
+                        sheet if USE_GOOGLE_SHEETS else df,
+                        linha_sheet,
+                        "followup"
+                    )
 
                 except Exception as e:
                     print(f"❌ Erro no follow-up para {cliente}: {e}")
