@@ -33,7 +33,7 @@ with col2:
 st.divider()
 
 # =========================
-# LOAD DATA (AJUSTADO 🔥)
+# LOAD DATA
 # =========================
 def load_data():
     data = carregar_leads()
@@ -48,7 +48,6 @@ def load_data():
 
     df = pd.DataFrame(df).copy()
 
-    # 🔥 Apenas colunas obrigatórias
     colunas_obrigatorias = [
         "cliente",
         "email",
@@ -57,12 +56,10 @@ def load_data():
         "ultimo_envio"
     ]
 
-    # garante que existam
     for col in colunas_obrigatorias:
         if col not in df.columns:
             df[col] = ""
 
-    # status padrão
     df["status"] = df["status"].replace("", "novo")
 
     validos = ["novo", "enviado", "followup", "respondido"]
@@ -113,12 +110,44 @@ with g2:
 st.divider()
 
 # =========================
-# TABELA
+# TABELA + FILTROS
 # =========================
 st.subheader("📋 Gerenciar Leads")
 
+# 🔎 FILTROS
+f1, f2, f3 = st.columns(3)
+
+with f1:
+    filtro_status = st.multiselect(
+        "Status",
+        options=df["status"].unique(),
+        default=df["status"].unique()
+    )
+
+with f2:
+    filtro_cliente = st.text_input("Buscar cliente")
+
+with f3:
+    filtro_email = st.text_input("Buscar email")
+
+# 🔥 APLICAR FILTROS
+df_filtrado = df.copy()
+
+df_filtrado = df_filtrado[df_filtrado["status"].isin(filtro_status)]
+
+if filtro_cliente:
+    df_filtrado = df_filtrado[
+        df_filtrado["cliente"].str.contains(filtro_cliente, case=False, na=False)
+    ]
+
+if filtro_email:
+    df_filtrado = df_filtrado[
+        df_filtrado["email"].str.contains(filtro_email, case=False, na=False)
+    ]
+
+# 🔥 EDITOR
 df_editado = st.data_editor(
-    df,
+    df_filtrado,
     use_container_width=True,
     num_rows="dynamic",
     hide_index=True,
@@ -136,10 +165,16 @@ df_editado = st.data_editor(
 # =========================
 b1, b2, b3 = st.columns(3)
 
-# SALVAR
+# SALVAR (CORRIGIDO 🔥)
 with b1:
     if st.button("💾 Salvar"):
-        df_novo = df_editado.fillna("").astype(str)
+
+        df_novo = df.copy()
+
+        for i in df_editado.index:
+            df_novo.loc[i] = df_editado.loc[i]
+
+        df_novo = df_novo.fillna("").astype(str)
 
         if is_google:
             sheet.clear()
@@ -201,19 +236,6 @@ with b3:
 if st.session_state.msg:
     st.success(st.session_state.msg)
     st.session_state.msg = None
-
-st.divider()
-
-# =========================
-# FILTRO
-# =========================
-status = st.selectbox(
-    "Filtrar",
-    ["Todos", "novo", "enviado", "followup", "respondido"]
-)
-
-if status != "Todos":
-    st.dataframe(df[df["status"] == status], use_container_width=True)
 
 st.markdown("---")
 st.caption("Scalytech © Sistema de automação comercial")
